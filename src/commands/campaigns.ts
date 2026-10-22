@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
+import { campaignPreflight } from "../preflight.js";
 import { SmartLeadClient, CliError, EXIT_ERROR } from "../client.js";
 import { printData, printError, detectFormat, type OutputFormat } from "../output.js";
 import { validated } from "../schemas/validate.js";
@@ -64,6 +65,26 @@ export function registerCampaignsCommand(program: Command): void {
         params: { include_tags: opts.includeTags },
       });
       printData(validated(data, CampaignSchema), resolveFormat(program));
+    });
+
+  cmd
+    .command("preflight")
+    .description("Read-only unsubscribe and per-step attribution checks (one line per finding)")
+    .requiredOption("--id <id>", "Campaign ID", (value: string) => {
+      if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+        throw new InvalidArgumentError("Campaign ID must be a positive safe integer");
+      }
+      return Number(value);
+    })
+    .action(async (opts) => {
+      const client = makeClient(program);
+      const campaign = await client.request<unknown>({ method: "GET", path: `/campaigns/${opts.id}` });
+      const sequences = await client.request<unknown>({ method: "GET", path: `/campaigns/${opts.id}/sequences` });
+      const findings = campaignPreflight(opts.id, campaign, sequences);
+      if (findings.length) {
+        process.stdout.write(findings.join("\n") + "\n");
+        process.exitCode = EXIT_ERROR;
+      }
     });
 
   // ── campaigns create ────────────────────────────────────────────────

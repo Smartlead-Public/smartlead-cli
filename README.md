@@ -117,6 +117,7 @@ Manage campaigns.
 ```
 smartlead campaigns list [--client-id ID] [--include-tags]
 smartlead campaigns get --id ID
+smartlead campaigns preflight --id ID
 smartlead campaigns create --name "My Campaign" | --from-json file.json
 smartlead campaigns update-schedule --id ID --from-json schedule.json
 smartlead campaigns update-settings --id ID --from-json settings.json
@@ -129,6 +130,18 @@ smartlead campaigns delete --id ID --confirm
 smartlead campaigns sequence-analytics --id ID --start-date 2025-01-01 --end-date 2025-01-31
 smartlead campaigns create-subsequence --id PARENT_ID --from-json subseq.json
 ```
+
+#### Read-Only Campaign Preflight
+
+Run `smartlead campaigns preflight --id ID` before a separately authorized launch or resume. It only reads `GET /campaigns/:id` and `GET /campaigns/:id/sequences`. It never changes settings, sequences, leads, or campaign status.
+
+- Every step must have a nonblank campaign `unsubscribe_text`, campaign `add_unsubscribe_tag: true`, or a body unsubscribe link. When a step has variants, every variant must be covered. Plain "reply unsubscribe" copy, empty anchors, comments, and script/style content do not qualify. Smartlead's documented [`%unsubscribe-text%` placeholder](https://helpcenter.smartlead.ai/en/articles/27-how-does-unsubscribing-work-in-smartlead-manage-unsubscribed-leads-effectively) is recognized.
+- Links containing any `utm_` query parameter must have exactly one `utm_content=email_<seq_number>` value. The check uses the provider's step number, not its position in the response. Untagged links are not required to adopt a tracking scheme.
+- HTML entities and URL query values are decoded before checking. The same URL repeated within a step is reported once. Findings identify the step and link position without printing URLs, message bodies, or recipients.
+
+Exit `0` with no output means these checks passed. Exit `1` prints one plain-text line per finding to stdout, regardless of `--format`. Invalid or empty sequence responses fail closed with a diagnostic on stderr. Existing transport and authentication exit codes still apply.
+
+This is a static preflight, not a send authorization or a test of delivery, provider rendering, or whether an opt-out endpoint actually works. It does not activate, resume, or send a test email.
 
 ### leads
 
@@ -439,6 +452,16 @@ smartlead analytics campaign-stats --from 2025-01-01 --to 2025-01-31 --format cs
 | `SMARTLEAD_API_KEY` | API key (overrides config file, overridden by `--api-key`) |
 | `SMARTLEAD_PROSPECT_API_URL` | Override prospect service base URL (default: `https://prospect-api.smartlead.ai/api/v1/search-email-leads`) |
 | `NO_COLOR` | Disable table borders/formatting (respected by cli-table3) |
+
+## Development Checks
+
+```bash
+npm ci
+npm run typecheck
+npm test
+```
+
+`npm test` builds the CLI and exercises campaign preflight through its real command and client with intercepted network responses. The fixtures reject non-GET requests and unexpected endpoints. No provider credentials or live network calls are needed.
 
 ## Requirements
 
